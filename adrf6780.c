@@ -122,7 +122,6 @@ struct adrf6780_dev {
 	bool			lo_ppf_en;
 	bool			lo_en;
 	bool			uc_bias_en;
-	bool			lo_en;
 	bool			lo_sideband;
 	bool			vdet_out_en;
 };
@@ -251,7 +250,7 @@ static int adrf6780_read_raw(struct iio_dev *indio_dev,
 		if (ret < 0)
 			goto exit;
 
-		if (!(temp & ADRF6780_ADC_STATUS_MSK)) {
+		if (!(data & ADRF6780_ADC_STATUS_MSK)) {
 			ret = -EINVAL;
 			goto exit;
 		}
@@ -266,10 +265,9 @@ static int adrf6780_read_raw(struct iio_dev *indio_dev,
 		
 		mutex_unlock(&dev->lock);
 		
-		*val = temp & ADRF6780_ADC_VALUE_MSK;
+		*val = data & ADRF6780_ADC_VALUE_MSK;
 
 		return IIO_VAL_INT;
-
 exit:
 		mutex_unlock(&dev->lock);
 		return ret;
@@ -278,7 +276,9 @@ exit:
 		if (ret < 0)
 			return ret;
 		
-		*val = temp & ADRF6780_RDAC_LINEARIZE_MSK;
+		*val = data & ADRF6780_RDAC_LINEARIZE_MSK;
+
+		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_PHASE:
 		ret = adrf6780_spi_read(dev, ADRF6780_REG_LO_PATH, &data);
 		if (ret < 0)
@@ -308,9 +308,11 @@ static int adrf6780_write_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_PHASE:
 		if (chan->channel2 == IIO_MOD_I)
 			ret = adrf6780_spi_update_bits(dev, ADRF6780_REG_LO_PATH,
+							ADRF6780_I_PATH_PHASE_ACCURACY_MSK,
 							ADRF6780_I_PATH_PHASE_ACCURACY(val));
 		else
 			ret = adrf6780_spi_update_bits(dev, ADRF6780_REG_LO_PATH,
+							ADRF6780_Q_PATH_PHASE_ACCURACY_MSK,
 							ADRF6780_Q_PATH_PHASE_ACCURACY(val));
 		return ret;
 	default:
@@ -345,7 +347,7 @@ static int adrf6780_freq_change(struct notifier_block *nb, unsigned long flags, 
 	/* cache the new rate */
 	dev->clkin_freq = clk_get_rate_scaled(cnd->clk, &dev->clkscale);
 
-	return notifier_from_errno(adrf6780_update_quad_filters(dev));
+	return notifier_from_errno(0);
 }
 
 static void adrf6780_clk_notifier_unreg(void *data)
@@ -364,7 +366,7 @@ static void adrf6780_clk_notifier_unreg(void *data)
 		BIT(IIO_CHAN_INFO_SCALE)		\
 }
 
-#define ADRF6780_CHAN(_channel, rf_comp) {			\
+#define ADRF6780_CHAN_IQ(_channel, rf_comp) {			\
 	.type = IIO_ALTVOLTAGE,					\
 	.modified = 1,						\
 	.output = 1,						\
@@ -376,8 +378,8 @@ static void adrf6780_clk_notifier_unreg(void *data)
 
 static const struct iio_chan_spec adrf6780_channels[] = {
 	ADRF6780_CHAN(0),
-	ADRF6780_CHAN(0, I),
-	ADRF6780_CHAN(0, Q),
+	ADRF6780_CHAN_IQ(0, I),
+	ADRF6780_CHAN_IQ(0, Q),
 };
 
 static int adrf6780_init(struct adrf6780_dev *dev)
@@ -417,8 +419,10 @@ static int adrf6780_init(struct adrf6780_dev *dev)
 		return ret;
 
 	chip_id = (chip_id & ADRF6780_CHIP_ID_MSK) >> 4;
-	if (chip_id != ADRF6780_CHIP_ID)
+	if (chip_id != ADRF6780_CHIP_ID) {
+		dev_err(&spi->dev, "ADRF6780 Invalid Chip ID.\n");
 		return -EINVAL;
+	}
 	
 	enable_reg_msk = ADRF6780_VGA_BUFFER_EN_MSK |
 			ADRF6780_DETECTOR_EN_MSK |
@@ -462,7 +466,6 @@ static void adrf6780_clk_disable(void *data)
 
 static int adrf6780_dt_parse(struct adrf6780_dev *dev)
 {
-	int ret;
 	struct spi_device *spi = dev->spi;
 
 	dev->parity_en = of_property_read_bool(spi->dev.of_node, "adi,parity-en");
@@ -489,7 +492,6 @@ static int adrf6780_probe(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev;
 	struct adrf6780_dev *dev;
-	struct clock_scale dev_clkscale;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*dev));
