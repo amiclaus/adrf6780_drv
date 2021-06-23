@@ -111,9 +111,20 @@ struct adrf6780_dev {
 	/* Protect against concurrent accesses to the device */
 	struct mutex		lock;
 	struct notifier_block	nb;
-	u8			quad_se_mode;
 	u64			clkin_freq;
 	bool			parity_en;
+	bool			vga_buff_en;
+	bool			det_en;
+	bool			lo_buff_en;
+	bool			if_mode_en;
+	bool			iq_mode_en;
+	bool			lo_x2_en;
+	bool			lo_ppf_en;
+	bool			lo_en;
+	bool			uc_bias_en;
+	bool			lo_en;
+	bool			lo_sideband;
+	bool			vga_buff_en;
 };
 
 static int adrf6780_spi_read(struct adrf6780_dev *dev, unsigned int reg,
@@ -271,7 +282,6 @@ static int adrf6780_reg_access(struct iio_dev *indio_dev,
 		return adrf6780_spi_write(dev, reg, write_val);
 }
 
-
 static const struct iio_info adrf6780_info = {
 	.read_raw = adrf6780_read_raw,
 	.write_raw = adrf6780_write_raw,
@@ -329,25 +339,25 @@ static int adrf6780_init(struct adrf6780_dev *dev)
 	bool temp_parity = dev->parity_en;
 
 	/* Perform a software reset */
-	ret = __admv1014_spi_update_bits(dev, ADMV1014_REG_SPI_CONTROL,
-				 ADMV1014_SPI_SOFT_RESET_MSK,
-				 ADMV1014_SPI_SOFT_RESET(1));
+	ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_CONTROL,
+				 ADRF6780_SOFT_RESET_MSK,
+				 ADRF6780_SOFT_RESET(1));
 	if (ret < 0) {
-		dev_err(&spi->dev, "ADMV1014 SPI software reset failed.\n");
+		dev_err(&spi->dev, "ADRF6780 SPI software reset failed.\n");
 		return ret;
 	}
 
-	ret = __admv1014_spi_update_bits(dev, ADMV1014_REG_SPI_CONTROL,
-				 ADMV1014_SPI_SOFT_RESET_MSK,
-				 ADMV1014_SPI_SOFT_RESET(0));
+	ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_CONTROL,
+				 ADRF6780_SOFT_RESET_MSK,
+				 ADRF6780_SOFT_RESET(0));
 	if (ret < 0) {
-		dev_err(&spi->dev, "ADMV1014 SPI software reset disable failed.\n");
+		dev_err(&spi->dev, "ADRF6780 SPI software reset disable failed.\n");
 		return ret;
 	}
 	
-	ret = admv1013_spi_update_bits(dev, ADMV1013_REG_SPI_CONTROL,
-				 ADMV1013_PARITY_EN_MSK,
-				 ADMV1013_PARITY_EN(temp_parity));
+	ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_CONTROL,
+				 ADRF6780_PARITY_EN_MSK,
+				 ADRF6780_PARITY_EN(temp_parity));
 	if (ret < 0)
 		return ret;
 
@@ -370,6 +380,31 @@ static void adrf6780_clk_disable(void *data)
 
 	clk_disable_unprepare(dev->clkin);
 }
+
+static int adrf6780_dt_parse(struct adrf6780_dev *dev)
+{
+	int ret;
+	struct spi_device *spi = dev->spi;
+
+	dev->parity_en = of_property_read_bool(spi->dev.of_node, "adi,parity-en");
+	dev->vga_buff_en = of_property_read_bool(spi->dev.of_node, "adi,vga-buff-en");
+	dev->det_en = of_property_read_bool(spi->dev.of_node, "adi,det-en");
+	dev->lo_buff_en = of_property_read_bool(spi->dev.of_node, "adi,lo-buff-en");
+	dev->if_mode_en = of_property_read_bool(spi->dev.of_node, "adi,if-mode-en");
+	dev->iq_mode_en = of_property_read_bool(spi->dev.of_node, "adi,iq-mode-en");
+	dev->lo_x2_en = of_property_read_bool(spi->dev.of_node, "adi,lo-x2-en");
+	dev->lo_ppf_en = of_property_read_bool(spi->dev.of_node, "adi,lo-ppf-en");
+	dev->lo_en = of_property_read_bool(spi->dev.of_node, "adi,lo-en");
+	dev->uc_bias_en = of_property_read_bool(spi->dev.of_node, "adi,uc-bias-en");
+	dev->lo_en = of_property_read_bool(spi->dev.of_node, "adi,lo-en");
+	dev->lo_sideband = of_property_read_bool(spi->dev.of_node, "adi,lo-sideband");
+	dev->vdet_out_en = of_property_read_bool(spi->dev.of_node, "adi,vdet-out-en");
+
+	dev->clkin = devm_clk_get(&spi->dev, "lo_in");
+	if (IS_ERR(dev->clkin))
+		return PTR_ERR(dev->clkin);
+
+	return of_clk_get_scale(spi->dev.of_node, NULL, &dev->clkscale);
 
 static int adrf6780_probe(struct spi_device *spi)
 {
