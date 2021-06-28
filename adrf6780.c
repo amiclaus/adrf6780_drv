@@ -345,7 +345,7 @@ static int adrf6780_freq_change(struct notifier_block *nb, unsigned long flags, 
 	/* cache the new rate */
 	dev->clkin_freq = clk_get_rate_scaled(cnd->clk, &dev->clkscale);
 
-	return notifier_from_errno(0);
+	return NOTIFY_OK;
 }
 
 static void adrf6780_clk_notifier_unreg(void *data)
