@@ -250,6 +250,8 @@ static int adrf6780_read_raw(struct iio_dev *indio_dev,
 		ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_ADC_CONTROL,
 						ADRF6780_ADC_START_MSK,
 						ADRF6780_ADC_START(0));
+		if (ret < 0)
+			goto exit;
 
 		ret = adrf6780_spi_read(dev, ADRF6780_REG_ADC_OUTPUT, &data);
 		if (ret < 0)
@@ -362,6 +364,8 @@ static int adrf6780_init(struct adrf6780_dev *dev)
 	unsigned int chip_id, enable_reg, enable_reg_msk;
 	struct spi_device *spi = dev->spi;
 	bool temp_parity = dev->parity_en;
+
+	dev->parity_en = false;
 
 	/* Perform a software reset */
 	ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_CONTROL,
@@ -517,9 +521,9 @@ MODULE_DEVICE_TABLE(of, adrf6780_of_match);
 
 static struct spi_driver adrf6780_driver = {
 	.driver = {
-			.name = "adrf6780",
-			.of_match_table = adrf6780_of_match,
-		},
+		.name = "adrf6780",
+		.of_match_table = adrf6780_of_match,
+	},
 	.probe = adrf6780_probe,
 	.id_table = adrf6780_id,
 };
