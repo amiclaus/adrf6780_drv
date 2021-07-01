@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0+
+// SPDX-License-Identifier: GPL-2.0
 /*
  * ADRF6780 driver
  *
@@ -14,7 +14,6 @@
 #include <linux/device.h>
 #include <linux/iio/iio.h>
 #include <linux/module.h>
-#include <linux/regmap.h>
 #include <linux/spi/spi.h>
 
 /* ADRF6780 Register Map */
@@ -95,18 +94,12 @@
 #define ADRF6780_ADC_VALUE_MSK			GENMASK(7, 0)
 #define ADRF6780_ADC_VALUE(x)			FIELD_PREP(ADRF6780_ADC_VALUE_MSK, x)
 
-enum supported_parts {
-	ADRF6780,
-};
-
 struct adrf6780_dev {
 	struct spi_device	*spi;
 	struct clk		*clkin;
 	/* Protect against concurrent accesses to the device */
 	struct mutex		lock;
-	bool			parity_en;
 	bool			vga_buff_en;
-	bool			det_en;
 	bool			lo_buff_en;
 	bool			if_mode_en;
 	bool			iq_mode_en;
@@ -122,7 +115,7 @@ static int adrf6780_spi_read(struct adrf6780_dev *dev, unsigned int reg,
 			      unsigned int *val)
 {
 	int ret;
-	unsigned int cnt, temp;
+	unsigned int temp;
 	struct spi_transfer t = {0};
 	u8 data[3];
 
@@ -141,12 +134,6 @@ static int adrf6780_spi_read(struct adrf6780_dev *dev, unsigned int reg,
 	temp = ((data[0] | 0x80 | (reg << 1)) << 16) |
 		(data[1] << 8) | data[2];
 
-	if (dev->parity_en) {
-		cnt = hweight_long(temp);
-		if (!(cnt % 2))
-			return -EINVAL;
-	}
-
 	*val = (temp >> 1) & 0xFFFF;
 
 	return ret;
@@ -156,16 +143,9 @@ static int adrf6780_spi_write(struct adrf6780_dev *dev,
 				      unsigned int reg,
 				      unsigned int val)
 {
-	unsigned int cnt;
 	u8 data[3];
 
 	val = (val << 1);
-
-	if (dev->parity_en) {
-		cnt = hweight_long((reg << 17) | val);
-		if (cnt % 2 == 0)
-			val |= 0x1;
-	}
 
 	data[0] = (reg << 1) | (val >> 16);
 	data[1] = val >> 8;
@@ -212,26 +192,12 @@ static int adrf6780_read_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_RAW:
 		mutex_lock(&dev->lock);
 
-		ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_ENABLE,
-						ADRF6780_DETECTOR_EN_MSK,
-						ADRF6780_DETECTOR_EN(1));
-		if (ret < 0)
-			goto exit;
-
 		ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_ADC_CONTROL,
-						ADRF6780_ADC_EN_MSK,
-						ADRF6780_ADC_EN(1));
-		if (ret < 0)
-			goto exit;
-
-		ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_ADC_CONTROL,
-						ADRF6780_ADC_CLOCK_EN_MSK,
-						ADRF6780_ADC_CLOCK_EN(1));
-		if (ret < 0)
-			goto exit;
-
-		ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_ADC_CONTROL,
+						ADRF6780_ADC_EN_MSK |
+						ADRF6780_ADC_CLOCK_EN_MSK |
 						ADRF6780_ADC_START_MSK,
+						ADRF6780_ADC_EN(1) |
+						ADRF6780_ADC_CLOCK_EN(1) |
 						ADRF6780_ADC_START(1));
 		if (ret < 0)
 			goto exit;
@@ -358,16 +324,11 @@ static const struct iio_chan_spec adrf6780_channels[] = {
 	ADRF6780_CHAN_IQ(0, Q),
 };
 
-static int adrf6780_init(struct adrf6780_dev *dev)
+static int adrf6780_reset(struct adrf6780_dev *dev)
 {
 	int ret;
-	unsigned int chip_id, enable_reg, enable_reg_msk;
 	struct spi_device *spi = dev->spi;
-	bool temp_parity = dev->parity_en;
 
-	dev->parity_en = false;
-
-	/* Perform a software reset */
 	ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_CONTROL,
 				 ADRF6780_SOFT_RESET_MSK,
 				 ADRF6780_SOFT_RESET(1));
@@ -384,13 +345,19 @@ static int adrf6780_init(struct adrf6780_dev *dev)
 		return ret;
 	}
 
-	ret = __adrf6780_spi_update_bits(dev, ADRF6780_REG_CONTROL,
-				 ADRF6780_PARITY_EN_MSK,
-				 ADRF6780_PARITY_EN(temp_parity));
+	return ret;
+}
+
+static int adrf6780_init(struct adrf6780_dev *dev)
+{
+	int ret;
+	unsigned int chip_id, enable_reg, enable_reg_msk;
+	struct spi_device *spi = dev->spi;
+
+	/* Perform a software reset */
+	ret = adrf6780_reset(dev);
 	if (ret < 0)
 		return ret;
-
-	dev->parity_en = temp_parity;
 
 	ret = adrf6780_spi_read(dev, ADRF6780_REG_CONTROL, &chip_id);
 	if (ret < 0)
@@ -413,7 +380,7 @@ static int adrf6780_init(struct adrf6780_dev *dev)
 			ADRF6780_UC_BIAS_EN_MSK;
 
 	enable_reg = ADRF6780_VGA_BUFFER_EN(dev->vga_buff_en) |
-			ADRF6780_DETECTOR_EN(dev->det_en) |
+			ADRF6780_DETECTOR_EN(1) |
 			ADRF6780_LO_BUFFER_EN(dev->lo_buff_en) |
 			ADRF6780_IF_MODE_EN(dev->if_mode_en) |
 			ADRF6780_IQ_MODE_EN(dev->iq_mode_en) |
@@ -446,9 +413,7 @@ static int adrf6780_dt_parse(struct adrf6780_dev *dev)
 {
 	struct spi_device *spi = dev->spi;
 
-	dev->parity_en = of_property_read_bool(spi->dev.of_node, "adi,parity-en");
 	dev->vga_buff_en = of_property_read_bool(spi->dev.of_node, "adi,vga-buff-en");
-	dev->det_en = of_property_read_bool(spi->dev.of_node, "adi,det-en");
 	dev->lo_buff_en = of_property_read_bool(spi->dev.of_node, "adi,lo-buff-en");
 	dev->if_mode_en = of_property_read_bool(spi->dev.of_node, "adi,if-mode-en");
 	dev->iq_mode_en = of_property_read_bool(spi->dev.of_node, "adi,iq-mode-en");
@@ -458,10 +423,6 @@ static int adrf6780_dt_parse(struct adrf6780_dev *dev)
 	dev->uc_bias_en = of_property_read_bool(spi->dev.of_node, "adi,uc-bias-en");
 	dev->lo_sideband = of_property_read_bool(spi->dev.of_node, "adi,lo-sideband");
 	dev->vdet_out_en = of_property_read_bool(spi->dev.of_node, "adi,vdet-out-en");
-
-	dev->clkin = devm_clk_get(&spi->dev, "lo_in");
-	if (IS_ERR(dev->clkin))
-		return PTR_ERR(dev->clkin);
 
 	return 0;
 }
@@ -478,7 +439,6 @@ static int adrf6780_probe(struct spi_device *spi)
 
 	dev = iio_priv(indio_dev);
 
-	indio_dev->dev.parent = &spi->dev;
 	indio_dev->info = &adrf6780_info;
 	indio_dev->name = "adrf6780";
 	indio_dev->channels = adrf6780_channels;
@@ -489,6 +449,10 @@ static int adrf6780_probe(struct spi_device *spi)
 	ret = adrf6780_dt_parse(dev);
 	if (ret < 0)
 		return ret;
+
+	dev->clkin = devm_clk_get(&spi->dev, "lo_in");
+	if (IS_ERR(dev->clkin))
+		return PTR_ERR(dev->clkin);
 
 	ret = clk_prepare_enable(dev->clkin);
 	if (ret < 0)
@@ -508,14 +472,14 @@ static int adrf6780_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id adrf6780_id[] = {
-	{ "adrf6780", ADRF6780 },
+	{ "adrf6780", 0 },
 	{}
 };
 MODULE_DEVICE_TABLE(spi, adrf6780_id);
 
 static const struct of_device_id adrf6780_of_match[] = {
 	{ .compatible = "adi,adrf6780" },
-	{},
+	{}
 };
 MODULE_DEVICE_TABLE(of, adrf6780_of_match);
 
