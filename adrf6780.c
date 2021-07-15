@@ -86,6 +86,7 @@ struct adrf6780_dev {
 	bool			uc_bias_en;
 	bool			lo_sideband;
 	bool			vdet_out_en;
+	u8			data[3] ____cacheline_aligned;
 };
 
 static int adrf6780_spi_read(struct adrf6780_dev *dev, unsigned int reg,
@@ -93,21 +94,20 @@ static int adrf6780_spi_read(struct adrf6780_dev *dev, unsigned int reg,
 {
 	int ret;
 	struct spi_transfer t = {0};
-	u8 data[3];
 
-	data[0] = 0x80 | (reg << 1);
-	data[1] = 0x0;
-	data[2] = 0x0;
+	dev->data[0] = 0x80 | (reg << 1);
+	dev->data[1] = 0x0;
+	dev->data[2] = 0x0;
 
-	t.rx_buf = &data[0];
-	t.tx_buf = &data[0];
+	t.rx_buf = &dev->data[0];
+	t.tx_buf = &dev->data[0];
 	t.len = 3;
 
 	ret = spi_sync_transfer(dev->spi, &t, 1);
 	if (ret)
 		return ret;
 
-	*val = (get_unaligned_be24(&data[0]) >> 1) & GENMASK(15, 0);
+	*val = (get_unaligned_be24(&dev->data[0]) >> 1) & GENMASK(15, 0);
 
 	return ret;
 }
@@ -116,11 +116,9 @@ static int adrf6780_spi_write(struct adrf6780_dev *dev,
 				      unsigned int reg,
 				      unsigned int val)
 {
-	u8 data[3];
+	put_unaligned_be24((val << 1) | (reg << 17), &dev->data[0]);
 
-	put_unaligned_be24((val << 1) | (reg << 17), &data[0]);
-
-	return spi_write(dev->spi, &data[0], 3);
+	return spi_write(dev->spi, &dev->data[0], 3);
 }
 
 static int adrf6780_spi_update_bits(struct adrf6780_dev *dev, unsigned int reg,
