@@ -136,7 +136,7 @@ static int adrf6780_spi_update_bits(struct adrf6780_dev *dev, unsigned int reg,
 	return adrf6780_spi_write(dev, reg, temp);
 }
 
-static int adrf6780_read_voltage_raw(struct adrf6780_dev *dev, unsigned int read_val)
+static int adrf6780_read_voltage_raw(struct adrf6780_dev *dev, unsigned int *read_val)
 {
 	int ret;
 
@@ -154,7 +154,7 @@ static int adrf6780_read_voltage_raw(struct adrf6780_dev *dev, unsigned int read
 
 	usleep_range(200, 250);
 
-	ret = adrf6780_spi_read(dev, ADRF6780_REG_ADC_OUTPUT, &read_val);
+	ret = adrf6780_spi_read(dev, ADRF6780_REG_ADC_OUTPUT, read_val);
 	if (ret)
 		goto exit;
 
@@ -169,7 +169,7 @@ static int adrf6780_read_voltage_raw(struct adrf6780_dev *dev, unsigned int read
 	if (ret)
 		goto exit;
 
-	ret = adrf6780_spi_read(dev, ADRF6780_REG_ADC_OUTPUT, &read_val);
+	ret = adrf6780_spi_read(dev, ADRF6780_REG_ADC_OUTPUT, read_val);
 
 exit:
 	mutex_unlock(&dev->lock);
@@ -186,7 +186,7 @@ static int adrf6780_read_raw(struct iio_dev *indio_dev,
 
 	switch (info) {
 	case IIO_CHAN_INFO_RAW:
-		ret = adrf6780_read_voltage_raw(dev, data);
+		ret = adrf6780_read_voltage_raw(dev, &data);
 		if (ret)
 			return ret;
 
