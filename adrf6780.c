@@ -136,7 +136,7 @@ static int adrf6780_spi_update_bits(struct adrf6780_dev *dev, unsigned int reg,
 	return adrf6780_spi_write(dev, reg, temp);
 }
 
-static int adrf6780_read_voltage_raw(struct adrf6780_dev *dev, unsigned int *read_val)
+static int adrf6780_read_adc_raw(struct adrf6780_dev *dev, unsigned int *read_val)
 {
 	int ret;
 
@@ -152,13 +152,14 @@ static int adrf6780_read_voltage_raw(struct adrf6780_dev *dev, unsigned int *rea
 	if (ret)
 		goto exit;
 
+	/* Recommended delay for the ADC to be ready*/
 	usleep_range(200, 250);
 
 	ret = adrf6780_spi_read(dev, ADRF6780_REG_ADC_OUTPUT, read_val);
 	if (ret)
 		goto exit;
 
-	if (!(read_val & ADRF6780_ADC_STATUS_MSK)) {
+	if (!(*read_val & ADRF6780_ADC_STATUS_MSK)) {
 		ret = -EINVAL;
 		goto exit;
 	}
@@ -186,7 +187,7 @@ static int adrf6780_read_raw(struct iio_dev *indio_dev,
 
 	switch (info) {
 	case IIO_CHAN_INFO_RAW:
-		ret = adrf6780_read_voltage_raw(dev, &data);
+		ret = adrf6780_read_adc_raw(dev, &data);
 		if (ret)
 			return ret;
 
@@ -389,7 +390,7 @@ static void adrf6780_clk_disable(void *data)
 	clk_disable_unprepare(data);
 }
 
-static void adrf6780_dt_parse(struct adrf6780_dev *dev)
+static void adrf6780_properties_parse(struct adrf6780_dev *dev)
 {
 	struct spi_device *spi = dev->spi;
 
@@ -424,7 +425,7 @@ static int adrf6780_probe(struct spi_device *spi)
 
 	dev->spi = spi;
 
-	adrf6780_dt_parse(dev);
+	adrf6780_properties_parse(dev);
 
 	dev->clkin = devm_clk_get(&spi->dev, "lo_in");
 	if (IS_ERR(dev->clkin))
