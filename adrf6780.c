@@ -280,16 +280,23 @@ static const struct iio_info adrf6780_info = {
 	.debugfs_reg_access = &adrf6780_reg_access,
 };
 
-#define ADRF6780_CHAN(_channel) {			\
-	.type = IIO_VOLTAGE,				\
+#define ADRF6780_CHAN_ADC(_channel) {			\
+	.type = IIO_ALTVOLTAGE,				\
 	.output = 1,					\
 	.indexed = 1,					\
 	.channel = _channel,				\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |	\
-		BIT(IIO_CHAN_INFO_SCALE)		\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW)	\
 }
 
-#define ADRF6780_CHAN_IQ(_channel, rf_comp) {			\
+#define ADRF6780_CHAN_RDAC(_channel) {			\
+	.type = IIO_ALTVOLTAGE,				\
+	.output = 1,					\
+	.indexed = 1,					\
+	.channel = _channel,				\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_SCALE)	\
+}
+
+#define ADRF6780_CHAN_IQ_PHASE(_channel, rf_comp) {		\
 	.type = IIO_ALTVOLTAGE,					\
 	.modified = 1,						\
 	.output = 1,						\
@@ -300,9 +307,10 @@ static const struct iio_info adrf6780_info = {
 }
 
 static const struct iio_chan_spec adrf6780_channels[] = {
-	ADRF6780_CHAN(0),
-	ADRF6780_CHAN_IQ(0, I),
-	ADRF6780_CHAN_IQ(0, Q),
+	ADRF6780_CHAN_ADC(0),
+	ADRF6780_CHAN_RDAC(0),
+	ADRF6780_CHAN_IQ_PHASE(0, I),
+	ADRF6780_CHAN_IQ_PHASE(0, Q),
 };
 
 static int adrf6780_reset(struct adrf6780_dev *dev)
