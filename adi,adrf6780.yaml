@@ -34,43 +34,45 @@ properties:
   clock-names:
     items:
       - const: lo_in
-  
+
   clock-output-names:
     maxItems: 1
 
   adi,vga-buff-en:
     description:
-      VGA Buffer Enable.
+      Variable Gain Amplifier Buffer Enable.
     type: boolean
 
   adi,lo-buff-en:
     description:
-      LO Buffer Enable.
+      Local Oscillator Buffer Enable.
     type: boolean
 
   adi,if-mode-en:
     description:
-      IF Mode Enable.
+      Intermediate Frequency Mode Enable.
     type: boolean
 
   adi,iq-mode-en:
     description:
-      IQ Mode Enable.
+      I/Q Mode Enable.
     type: boolean
 
   adi,lo-x2-en:
     description:
-      LO x2 Enable.
+      Double the Local Oscillator output frequency from the Local
+      Oscillator Input Frequency.
     type: boolean
 
   adi,lo-ppf-en:
     description:
-      LO x1 Enable.
+      Local Oscillator input frequency equal to the Local Oscillator
+      ouput frequency.
     type: boolean
 
   adi,lo-en:
     description:
-      LO Enable.
+      Local Oscillator Enable.
     type: boolean
 
   adi,uc-bias-en:
