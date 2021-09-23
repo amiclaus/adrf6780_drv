@@ -393,11 +393,6 @@ static int adrf6780_init(struct adrf6780_dev *dev)
 						FIELD_PREP(ADRF6780_VDET_OUTPUT_SELECT_MSK, dev->vdet_out_en));
 }
 
-static void adrf6780_clk_disable(void *data)
-{
-	clk_disable_unprepare(data);
-}
-
 static void adrf6780_properties_parse(struct adrf6780_dev *dev)
 {
 	struct spi_device *spi = dev->spi;
@@ -441,20 +436,44 @@ static int adrf6780_probe(struct spi_device *spi)
 
 	ret = clk_prepare_enable(dev->clkin);
 	if (ret < 0)
-		return ret;
-
-	ret = devm_add_action_or_reset(&spi->dev, adrf6780_clk_disable, dev->clkin);
-	if (ret < 0)
-		return ret;
+		goto error_disable_clk;
 
 	mutex_init(&dev->lock);
 
 	ret = adrf6780_init(dev);
 	if (ret)
+		goto error_disable_clk;;
+
+	ret = iio_device_register(indio_dev);
+	if (ret)
+		goto error_disable_clk;
+
+	return 0;
+
+error_disable_clk:
+	clk_disable_unprepare(dev->clkin);
+
+	return ret;
+}
+
+static int adrf6780_remove(struct spi_device *spi)
+{
+	int ret;
+	struct iio_dev *indio_dev = spi_get_drvdata(spi);
+	struct adrf6780_dev *dev = iio_priv(indio_dev);
+
+	/* Disable all components in the Enable Register */
+	ret = adrf6780_spi_write(dev, ADRF6780_REG_ENABLE, 0x0);
+	if(ret)
 		return ret;
 
-	return devm_iio_device_register(&spi->dev, indio_dev);
+	iio_device_unregister(indio_dev);
+
+	clk_disable_unprepare(dev->clkin);
+
+	return 0;
 }
+
 
 static const struct spi_device_id adrf6780_id[] = {
 	{ "adrf6780", 0 },
@@ -474,6 +493,7 @@ static struct spi_driver adrf6780_driver = {
 		.of_match_table = adrf6780_of_match,
 	},
 	.probe = adrf6780_probe,
+	.remove = adrf6780_remove,
 	.id_table = adrf6780_id,
 };
 module_spi_driver(adrf6780_driver);
