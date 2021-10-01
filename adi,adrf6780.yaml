@@ -40,54 +40,64 @@ properties:
 
   adi,vga-buff-en:
     description:
-      Variable Gain Amplifier Buffer Enable.
+      RF Variable Gain Amplifier Buffer Enable. Gain is controlled by
+      the voltage on the VATT pin.
     type: boolean
 
   adi,lo-buff-en:
     description:
-      Local Oscillator Buffer Enable.
+      Local Oscillator Amplifier Enable. Disable to put the part in
+      a power down state.
     type: boolean
 
   adi,if-mode-en:
     description:
-      Intermediate Frequency Mode Enable.
+      Intermediate Frequency Mode Enable. Either IF Mode or I/Q Mode
+      can be enabled at a time.
     type: boolean
 
   adi,iq-mode-en:
     description:
-      I/Q Mode Enable.
+      I/Q Mode Enable. Either IF Mode or I/Q Mode can be enabled at a
+      time.
     type: boolean
 
   adi,lo-x2-en:
     description:
       Double the Local Oscillator output frequency from the Local
-      Oscillator Input Frequency.
+      Oscillator Input Frequency. Either LOx1 or LOx2 can be enabled
+      at a time.
     type: boolean
 
   adi,lo-ppf-en:
     description:
       Local Oscillator input frequency equal to the Local Oscillator
-      ouput frequency.
+      output frequency (LO x1). Either LOx1 or LOx2 can be enabled
+      at a time.
     type: boolean
 
   adi,lo-en:
     description:
-      Local Oscillator Enable.
+      Enable additional cirtuitry in the LO chain. Disable to put the
+      part in a power down state.
     type: boolean
 
   adi,uc-bias-en:
     description:
-      UC Bias Enable.
+      Enable all bias circuitry thourghout the entire part.
+      Disable to put the part in a power down state.
     type: boolean
 
   adi,lo-sideband:
     description:
-      Switch to the Other LO Sideband.
+      Switch to the Lower LO Sideband. By default the Upper LO
+      sideband is enabled.
     type: boolean
 
   adi,vdet-out-en:
     description:
-      VDET Output Select Enable.
+      VDET Output Select Enable. Expose the RF detector output to the
+      VDET external pin.
     type: boolean
 
   '#clock-cells':
