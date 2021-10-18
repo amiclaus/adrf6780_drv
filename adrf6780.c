@@ -282,7 +282,7 @@ static const struct iio_info adrf6780_info = {
 
 #define ADRF6780_CHAN_ADC(_channel) {			\
 	.type = IIO_ALTVOLTAGE,				\
-	.output = 1,					\
+	.output = 0,					\
 	.indexed = 1,					\
 	.channel = _channel,				\
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW)	\
@@ -384,13 +384,15 @@ static int adrf6780_init(struct adrf6780_dev *dev)
 
 	ret = adrf6780_spi_update_bits(dev, ADRF6780_REG_LO_PATH,
 						ADRF6780_LO_SIDEBAND_MSK,
-						FIELD_PREP(ADRF6780_LO_SIDEBAND_MSK, dev->lo_sideband));
+						FIELD_PREP(ADRF6780_LO_SIDEBAND_MSK,
+						dev->lo_sideband));
 	if (ret)
 		return ret;
 
 	return adrf6780_spi_update_bits(dev, ADRF6780_REG_ADC_CONTROL,
 						ADRF6780_VDET_OUTPUT_SELECT_MSK,
-						FIELD_PREP(ADRF6780_VDET_OUTPUT_SELECT_MSK, dev->vdet_out_en));
+						FIELD_PREP(ADRF6780_VDET_OUTPUT_SELECT_MSK,
+						dev->vdet_out_en));
 }
 
 static void adrf6780_properties_parse(struct adrf6780_dev *dev)
@@ -407,6 +409,17 @@ static void adrf6780_properties_parse(struct adrf6780_dev *dev)
 	dev->uc_bias_en = device_property_read_bool(&spi->dev, "adi,uc-bias-en");
 	dev->lo_sideband = device_property_read_bool(&spi->dev, "adi,lo-sideband");
 	dev->vdet_out_en = device_property_read_bool(&spi->dev, "adi,vdet-out-en");
+}
+
+static void adrf6780_clk_disable(void *data)
+{
+	clk_disable_unprepare(data);
+}
+
+static void adrf6780_powerdown(void *data)
+{
+	/* Disable all components in the Enable Register */
+	adrf6780_spi_write(data, ADRF6780_REG_ENABLE, 0x0);
 }
 
 static int adrf6780_probe(struct spi_device *spi)
@@ -432,48 +445,29 @@ static int adrf6780_probe(struct spi_device *spi)
 
 	dev->clkin = devm_clk_get(&spi->dev, "lo_in");
 	if (IS_ERR(dev->clkin))
-		return PTR_ERR(dev->clkin);
+		return dev_err_probe(&spi->dev, PTR_ERR(dev->clkin),
+					"failed to get the LO input clock\n");
 
 	ret = clk_prepare_enable(dev->clkin);
-	if (ret < 0)
-		goto error_disable_clk;
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(&spi->dev, adrf6780_clk_disable, dev->clkin);
+	if (ret)
+		return ret;
 
 	mutex_init(&dev->lock);
 
 	ret = adrf6780_init(dev);
 	if (ret)
-		goto error_disable_clk;;
-
-	ret = iio_device_register(indio_dev);
-	if (ret)
-		goto error_disable_clk;
-
-	return 0;
-
-error_disable_clk:
-	clk_disable_unprepare(dev->clkin);
-
-	return ret;
-}
-
-static int adrf6780_remove(struct spi_device *spi)
-{
-	int ret;
-	struct iio_dev *indio_dev = spi_get_drvdata(spi);
-	struct adrf6780_dev *dev = iio_priv(indio_dev);
-
-	/* Disable all components in the Enable Register */
-	ret = adrf6780_spi_write(dev, ADRF6780_REG_ENABLE, 0x0);
-	if(ret)
 		return ret;
 
-	iio_device_unregister(indio_dev);
+	ret = devm_add_action_or_reset(&spi->dev, adrf6780_powerdown, dev);
+	if (ret)
+		return ret;
 
-	clk_disable_unprepare(dev->clkin);
-
-	return 0;
+	return devm_iio_device_register(&spi->dev, indio_dev);
 }
-
 
 static const struct spi_device_id adrf6780_id[] = {
 	{ "adrf6780", 0 },
@@ -493,7 +487,6 @@ static struct spi_driver adrf6780_driver = {
 		.of_match_table = adrf6780_of_match,
 	},
 	.probe = adrf6780_probe,
-	.remove = adrf6780_remove,
 	.id_table = adrf6780_id,
 };
 module_spi_driver(adrf6780_driver);
