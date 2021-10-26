@@ -118,7 +118,7 @@ static int adrf6780_spi_read(struct adrf6780_state *st, unsigned int reg,
 	int ret;
 
 	mutex_lock(&st->lock);
-	ret = adrf6780_spi_read(st, reg, val);
+	ret = __adrf6780_spi_read(st, reg, val);
 	mutex_unlock(&st->lock);
 
 	return ret;
@@ -139,14 +139,14 @@ static int adrf6780_spi_write(struct adrf6780_state *st, unsigned int reg,
 	int ret;
 
 	mutex_lock(&st->lock);
-	ret = adrf6780_spi_write(st, reg, val);
+	ret = __adrf6780_spi_write(st, reg, val);
 	mutex_unlock(&st->lock);
 
 	return ret;
 }
 
-static int adrf6780_spi_update_bits(struct adrf6780_state *st, unsigned int reg,
-				    unsigned int mask, unsigned int val)
+static int __adrf6780_spi_update_bits(struct adrf6780_state *st, unsigned int reg,
+				      unsigned int mask, unsigned int val)
 {
 	int ret;
 	unsigned int data, temp;
@@ -160,19 +160,31 @@ static int adrf6780_spi_update_bits(struct adrf6780_state *st, unsigned int reg,
 	return __adrf6780_spi_write(st, reg, temp);
 }
 
+static int adrf6780_spi_update_bits(struct adrf6780_state *st, unsigned int reg,
+				    unsigned int mask, unsigned int val)
+{
+	int ret;
+
+	mutex_lock(&st->lock);
+	ret = __adrf6780_spi_update_bits(st, reg, mask, val);
+	mutex_unlock(&st->lock);
+
+	return ret;
+}
+
 static int adrf6780_read_adc_raw(struct adrf6780_state *st, unsigned int *read_val)
 {
 	int ret;
 
 	mutex_lock(&st->lock);
 
-	ret = adrf6780_spi_update_bits(st, ADRF6780_REG_ADC_CONTROL,
-				       ADRF6780_ADC_EN_MSK |
-				       ADRF6780_ADC_CLOCK_EN_MSK |
-				       ADRF6780_ADC_START_MSK,
-				       FIELD_PREP(ADRF6780_ADC_EN_MSK, 1) |
-				       FIELD_PREP(ADRF6780_ADC_CLOCK_EN_MSK, 1) |
-				       FIELD_PREP(ADRF6780_ADC_START_MSK, 1));
+	ret = __adrf6780_spi_update_bits(st, ADRF6780_REG_ADC_CONTROL,
+					 ADRF6780_ADC_EN_MSK |
+					 ADRF6780_ADC_CLOCK_EN_MSK |
+					 ADRF6780_ADC_START_MSK,
+					 FIELD_PREP(ADRF6780_ADC_EN_MSK, 1) |
+					 FIELD_PREP(ADRF6780_ADC_CLOCK_EN_MSK, 1) |
+					 FIELD_PREP(ADRF6780_ADC_START_MSK, 1));
 	if (ret)
 		goto exit;
 
@@ -188,9 +200,9 @@ static int adrf6780_read_adc_raw(struct adrf6780_state *st, unsigned int *read_v
 		goto exit;
 	}
 
-	ret = adrf6780_spi_update_bits(st, ADRF6780_REG_ADC_CONTROL,
-				       ADRF6780_ADC_START_MSK,
-				       FIELD_PREP(ADRF6780_ADC_START_MSK, 0));
+	ret = __adrf6780_spi_update_bits(st, ADRF6780_REG_ADC_CONTROL,
+					 ADRF6780_ADC_START_MSK,
+					 FIELD_PREP(ADRF6780_ADC_START_MSK, 0));
 	if (ret)
 		goto exit;
 
@@ -254,7 +266,6 @@ static int adrf6780_write_raw(struct iio_dev *indio_dev,
 			      int val, int val2, long info)
 {
 	struct adrf6780_state *st = iio_priv(indio_dev);
-	int ret;
 
 	switch (info) {
 	case IIO_CHAN_INFO_SCALE:
@@ -262,21 +273,13 @@ static int adrf6780_write_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_PHASE:
 		switch (chan->channel2) {
 		case IIO_MOD_I:
-			mutex_lock(&st->lock);
-			ret = adrf6780_spi_update_bits(st, ADRF6780_REG_LO_PATH,
-						       ADRF6780_I_PATH_PHASE_ACCURACY_MSK,
-						       FIELD_PREP(ADRF6780_I_PATH_PHASE_ACCURACY_MSK, val));
-			mutex_unlock(&st->lock);
-
-			return ret;
+			return adrf6780_spi_update_bits(st, ADRF6780_REG_LO_PATH,
+							ADRF6780_I_PATH_PHASE_ACCURACY_MSK,
+							FIELD_PREP(ADRF6780_I_PATH_PHASE_ACCURACY_MSK, val));
 		case IIO_MOD_Q:
-			mutex_lock(&st->lock);
-			ret = adrf6780_spi_update_bits(st, ADRF6780_REG_LO_PATH,
-						       ADRF6780_Q_PATH_PHASE_ACCURACY_MSK,
-						       FIELD_PREP(ADRF6780_Q_PATH_PHASE_ACCURACY_MSK, val));
-			mutex_unlock(&st->lock);
-
-			return ret;
+			return adrf6780_spi_update_bits(st, ADRF6780_REG_LO_PATH,
+							ADRF6780_Q_PATH_PHASE_ACCURACY_MSK,
+							FIELD_PREP(ADRF6780_Q_PATH_PHASE_ACCURACY_MSK, val));
 		default:
 			return -EINVAL;
 		}
@@ -342,17 +345,17 @@ static int adrf6780_reset(struct adrf6780_state *st)
 	int ret;
 	struct spi_device *spi = st->spi;
 
-	ret = adrf6780_spi_update_bits(st, ADRF6780_REG_CONTROL,
-				       ADRF6780_SOFT_RESET_MSK,
-				       FIELD_PREP(ADRF6780_SOFT_RESET_MSK, 1));
+	ret = __adrf6780_spi_update_bits(st, ADRF6780_REG_CONTROL,
+					 ADRF6780_SOFT_RESET_MSK,
+					 FIELD_PREP(ADRF6780_SOFT_RESET_MSK, 1));
 	if (ret) {
 		dev_err(&spi->dev, "ADRF6780 SPI software reset failed.\n");
 		return ret;
 	}
 
-	ret = adrf6780_spi_update_bits(st, ADRF6780_REG_CONTROL,
-				       ADRF6780_SOFT_RESET_MSK,
-				       FIELD_PREP(ADRF6780_SOFT_RESET_MSK, 0));
+	ret = __adrf6780_spi_update_bits(st, ADRF6780_REG_CONTROL,
+					 ADRF6780_SOFT_RESET_MSK,
+					 FIELD_PREP(ADRF6780_SOFT_RESET_MSK, 0));
 	if (ret) {
 		dev_err(&spi->dev, "ADRF6780 SPI software reset disable failed.\n");
 		return ret;
@@ -402,19 +405,19 @@ static int adrf6780_init(struct adrf6780_state *st)
 			FIELD_PREP(ADRF6780_LO_EN_MSK, st->lo_en) |
 			FIELD_PREP(ADRF6780_UC_BIAS_EN_MSK, st->uc_bias_en);
 
-	ret = adrf6780_spi_update_bits(st, ADRF6780_REG_ENABLE, enable_reg_msk, enable_reg);
+	ret = __adrf6780_spi_update_bits(st, ADRF6780_REG_ENABLE, enable_reg_msk, enable_reg);
 	if (ret)
 		return ret;
 
-	ret = adrf6780_spi_update_bits(st, ADRF6780_REG_LO_PATH,
-				       ADRF6780_LO_SIDEBAND_MSK,
-				       FIELD_PREP(ADRF6780_LO_SIDEBAND_MSK, st->lo_sideband));
+	ret = __adrf6780_spi_update_bits(st, ADRF6780_REG_LO_PATH,
+					 ADRF6780_LO_SIDEBAND_MSK,
+					 FIELD_PREP(ADRF6780_LO_SIDEBAND_MSK, st->lo_sideband));
 	if (ret)
 		return ret;
 
-	return adrf6780_spi_update_bits(st, ADRF6780_REG_ADC_CONTROL,
-					ADRF6780_VDET_OUTPUT_SELECT_MSK,
-					FIELD_PREP(ADRF6780_VDET_OUTPUT_SELECT_MSK, st->vdet_out_en));
+	return __adrf6780_spi_update_bits(st, ADRF6780_REG_ADC_CONTROL,
+					  ADRF6780_VDET_OUTPUT_SELECT_MSK,
+					  FIELD_PREP(ADRF6780_VDET_OUTPUT_SELECT_MSK, st->vdet_out_en));
 }
 
 static void adrf6780_properties_parse(struct adrf6780_state *st)
