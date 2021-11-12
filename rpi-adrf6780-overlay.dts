@@ -1,10 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /dts-v1/;
 /plugin/;
 
 / {
 	compatible = "brcm,bcm2835";
-
-
 
 	fragment@0 {
 		target = <&spidev0>;
@@ -47,5 +46,4 @@
 			};
 		};
 	};
-}; 
-
+};
