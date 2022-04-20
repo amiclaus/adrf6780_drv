@@ -56,8 +56,8 @@
  * @param data - Data value to write.
  * @return Returns 0 in case of success or negative error code otherwise.
  */
-int32_t adrf6780_spi_write(struct adrf6780_dev *dev, uint8_t reg_addr,
-			  uint16_t data)
+int adrf6780_spi_write(struct adrf6780_dev *dev, uint8_t reg_addr,
+		       uint16_t data)
 {
 	uint8_t buff[ADRF6780_BUFF_SIZE_BYTES];
 
@@ -76,10 +76,11 @@ int32_t adrf6780_spi_write(struct adrf6780_dev *dev, uint8_t reg_addr,
  * @param data - Data read from the device.
  * @return Returns 0 in case of success or negative error code otherwise.
  */
-int32_t adrf6780_spi_read(struct adrf6780_dev *dev, uint8_t reg_addr,
-			 uint16_t *data)
+int adrf6780_spi_read(struct adrf6780_dev *dev, uint8_t reg_addr,
+		      uint16_t *data)
 {
 	uint8_t buff[ADRF6780_BUFF_SIZE_BYTES];
+	int ret;
 
 	buff[0] = ADRF6780_SPI_READ_CMD | (reg_addr << 1);
 	buff[1] = 0;
@@ -102,8 +103,8 @@ int32_t adrf6780_spi_read(struct adrf6780_dev *dev, uint8_t reg_addr,
  * @param data - Data written to the device (requires prior bit shifting).
  * @return Returns 0 in case of success or negative error code otherwise.
  */
-int32_t adrf6780_spi_update_bits(struct adrf6780_dev *dev, uint8_t reg_addr,
-			       uint8_t mask, uint16_t data)
+int adrf6780_spi_update_bits(struct adrf6780_dev *dev, uint8_t reg_addr,
+			     uint16_t mask, uint16_t data)
 {
 	uint16_t read_val;
 	int ret;
@@ -127,7 +128,7 @@ int32_t adrf6780_spi_update_bits(struct adrf6780_dev *dev, uint8_t reg_addr,
 int adrf6780_set_rdac_linearize(struct adrf6780_dev *dev, uint8_t rdac_lin)
 {
 	return adrf6780_spi_write(dev, ADRF6780_REG_LINEARIZE,
-				no_os_field_prep(ADRF6780_RDAC_LINEARIZE_MSK, rdac_lin));
+				  no_os_field_prep(ADRF6780_RDAC_LINEARIZE_MSK, rdac_lin));
 }
 
 /**
@@ -138,6 +139,7 @@ int adrf6780_set_rdac_linearize(struct adrf6780_dev *dev, uint8_t rdac_lin)
  */
 int adrf6780_get_rdac_linearize(struct adrf6780_dev *dev, uint8_t *rdac_lin)
 {
+	uint16_t data;
 	int ret;
 
 	ret = adrf6780_spi_read(dev, ADRF6780_REG_LINEARIZE, &data);
@@ -157,21 +159,21 @@ int adrf6780_get_rdac_linearize(struct adrf6780_dev *dev, uint8_t *rdac_lin)
  * @return Returns 0 in case of success or negative error code otherwise.
  */
 int adrf6780_set_cdac_iq_phase_accuracy(struct adrf6780_dev *dev,
-					uint8_t i_data, uint8_t q_data);
+					uint8_t i_data, uint8_t q_data)
 {
 	int ret;
 
 	ret = adrf6780_spi_update_bits(dev,
-				ADRF6780_REG_LO_PATH,
-				ADRF6780_I_PATH_PHASE_ACCURACY_MSK,
-				no_os_field_prep(ADRF6780_I_PATH_PHASE_ACCURACY_MSK, i_data));
+				       ADRF6780_REG_LO_PATH,
+				       ADRF6780_I_PATH_PHASE_ACCURACY_MSK,
+				       no_os_field_prep(ADRF6780_I_PATH_PHASE_ACCURACY_MSK, i_data));
 	if (ret)
 		return ret;
 
 	return adrf6780_spi_update_bits(dev,
-				ADRF6780_REG_LO_PATH,
-				ADRF6780_Q_PATH_PHASE_ACCURACY_MSK,
-				no_os_field_prep(ADRF6780_Q_PATH_PHASE_ACCURACY_MSK, q_data));
+					ADRF6780_REG_LO_PATH,
+					ADRF6780_Q_PATH_PHASE_ACCURACY_MSK,
+					no_os_field_prep(ADRF6780_Q_PATH_PHASE_ACCURACY_MSK, q_data));
 }
 
 /**
@@ -184,8 +186,8 @@ int adrf6780_set_cdac_iq_phase_accuracy(struct adrf6780_dev *dev,
 int adrf6780_get_cdac_iq_phase_accuracy(struct adrf6780_dev *dev,
 					uint8_t *i_data, uint8_t *q_data)
 {
-	int ret;
 	uint16_t data;
+	int ret;
 
 	ret = adrf6780_spi_read(dev, ADRF6780_REG_LO_PATH, &data);
 	if (ret)
@@ -203,8 +205,37 @@ int adrf6780_get_cdac_iq_phase_accuracy(struct adrf6780_dev *dev,
  * @param data - ADC Data.
  * @return Returns 0 in case of success or negative error code otherwise.
  */
-int adrf6780_read_adc_raw(struct adrf6780_dev *dev, unsigned int *data)
+int adrf6780_read_adc_raw(struct adrf6780_dev *dev, uint16_t *data)
 {
+	int ret;
+
+	ret = adrf6780_spi_update_bits(dev, ADRF6780_REG_ADC_CONTROL,
+				       ADRF6780_ADC_EN_MSK |
+				       ADRF6780_ADC_CLOCK_EN_MSK |
+				       ADRF6780_ADC_START_MSK,
+				       no_os_field_prep(ADRF6780_ADC_EN_MSK, 1) |
+				       no_os_field_prep(ADRF6780_ADC_CLOCK_EN_MSK, 1) |
+				       no_os_field_prep(ADRF6780_ADC_START_MSK, 1));
+	if (ret)
+		return ret;
+
+	/* Recommended delay for the ADC to be ready */
+	no_os_udelay(200);
+
+	ret = adrf6780_spi_read(dev, ADRF6780_REG_ADC_OUTPUT, data);
+	if (ret)
+		return ret;
+
+	if (!(*data & ADRF6780_ADC_STATUS_MSK))
+		return -EINVAL;
+
+	ret = adrf6780_spi_update_bits(dev, ADRF6780_REG_ADC_CONTROL,
+				       ADRF6780_ADC_START_MSK,
+				       no_os_field_prep(ADRF6780_ADC_START_MSK, 0));
+	if (ret)
+		return ret;
+
+	return adrf6780_spi_read(dev, ADRF6780_REG_ADC_OUTPUT, data);
 }
 
 /**
@@ -214,6 +245,113 @@ int adrf6780_read_adc_raw(struct adrf6780_dev *dev, unsigned int *data)
  */
 int adrf6780_soft_reset(struct adrf6780_dev *dev)
 {
+	int ret;
+
+	ret = adrf6780_spi_update_bits(dev, ADRF6780_REG_CONTROL,
+				       ADRF6780_SOFT_RESET_MSK,
+				       no_os_field_prep(ADRF6780_SOFT_RESET_MSK, 1));
+	if (ret)
+		return ret;
+
+	return adrf6780_spi_update_bits(dev, ADRF6780_REG_CONTROL,
+					ADRF6780_SOFT_RESET_MSK,
+					no_os_field_prep(ADRF6780_SOFT_RESET_MSK, 0));
+}
+
+/**
+ * @brief Initializes the adrf6780.
+ * @param device - The device structure.
+ * @param init_param - The structure containing the device initial parameters.
+ * @return Returns 0 in case of success or negative error code.
+ */
+int adrf6780_init(struct adrf6780_dev **device,
+		  struct adrf6780_init_param *init_param)
+{
+	uint16_t chip_id, enable_reg_msk, enable_reg;
+	struct adrf6780_dev *dev;
+	int ret;
+
+	dev = (struct adrf6780_dev *)calloc(1, sizeof(*dev));
+	if (!dev)
+		return -ENOMEM;
+
+	dev->lo_in = init_param->lo_in;
+	dev->vga_buff_en = init_param->vga_buff_en;
+	dev->lo_buff_en = init_param->lo_buff_en;
+	dev->if_mode_en = init_param->if_mode_en;
+	dev->lo_x2_en = init_param->lo_x2_en;
+	dev->lo_en = init_param->lo_en;
+	dev->lo_in = init_param->lo_in;
+	dev->uc_bias_en = init_param->uc_bias_en;
+	dev->lo_sideband = init_param->lo_sideband;
+	dev->vdet_out_en = init_param->vdet_out_en;
+
+	/* SPI */
+	ret = no_os_spi_init(&dev->spi_desc, init_param->spi_init);
+	if (ret)
+		goto error_dev;
+
+	/* Perform a software reset */
+	ret = adrf6780_soft_reset(dev);
+	if (ret)
+		goto error_spi;
+
+	ret = adrf6780_spi_read(dev, ADRF6780_REG_CONTROL, &chip_id);
+	if (ret)
+		goto error_spi;
+
+	chip_id = no_os_field_get(ADRF6780_CHIP_ID_MSK, chip_id);
+	if (chip_id != ADRF6780_CHIP_ID) {
+		ret = -EINVAL;
+		goto error_spi;
+	}
+
+	enable_reg_msk = ADRF6780_VGA_BUFFER_EN_MSK |
+			 ADRF6780_DETECTOR_EN_MSK |
+			 ADRF6780_LO_BUFFER_EN_MSK |
+			 ADRF6780_IF_MODE_EN_MSK |
+			 ADRF6780_IQ_MODE_EN_MSK |
+			 ADRF6780_LO_X2_EN_MSK |
+			 ADRF6780_LO_PPF_EN_MSK |
+			 ADRF6780_LO_EN_MSK |
+			 ADRF6780_UC_BIAS_EN_MSK;
+
+	enable_reg = no_os_field_prep(ADRF6780_VGA_BUFFER_EN_MSK, dev->vga_buff_en) |
+		     no_os_field_prep(ADRF6780_DETECTOR_EN_MSK, 1) |
+		     no_os_field_prep(ADRF6780_LO_BUFFER_EN_MSK, dev->lo_buff_en) |
+		     no_os_field_prep(ADRF6780_IF_MODE_EN_MSK, dev->if_mode_en) |
+		     no_os_field_prep(ADRF6780_IQ_MODE_EN_MSK, !(dev->if_mode_en)) |
+		     no_os_field_prep(ADRF6780_LO_X2_EN_MSK, dev->lo_x2_en) |
+		     no_os_field_prep(ADRF6780_LO_PPF_EN_MSK, !(dev->lo_x2_en)) |
+		     no_os_field_prep(ADRF6780_LO_EN_MSK, dev->lo_en) |
+		     no_os_field_prep(ADRF6780_UC_BIAS_EN_MSK, dev->uc_bias_en);
+
+	ret = adrf6780_spi_update_bits(dev, ADRF6780_REG_ENABLE,
+				       enable_reg_msk, enable_reg);
+	if (ret)
+		return ret;
+
+	ret = adrf6780_spi_update_bits(dev, ADRF6780_REG_LO_PATH,
+				       ADRF6780_LO_SIDEBAND_MSK,
+				       no_os_field_prep(ADRF6780_LO_SIDEBAND_MSK, dev->lo_sideband));
+	if (ret)
+		return ret;
+
+	ret = adrf6780_spi_update_bits(dev, ADRF6780_REG_ADC_CONTROL,
+				       ADRF6780_VDET_OUTPUT_SELECT_MSK,
+				       no_os_field_prep(ADRF6780_VDET_OUTPUT_SELECT_MSK, dev->vdet_out_en));
+	if (ret)
+		return ret;
+
+	*device = dev;
+
+	return 0;
+error_spi:
+	no_os_spi_remove(dev->spi_desc);
+error_dev:
+	free(dev);
+
+	return ret;
 }
 
 /**
@@ -223,4 +361,13 @@ int adrf6780_soft_reset(struct adrf6780_dev *dev)
  */
 int adrf6780_remove(struct adrf6780_dev *dev)
 {
+	int ret;
+
+	ret = no_os_spi_remove(dev->spi_desc);
+	if (ret)
+		return ret;
+
+	free(dev);
+
+	return 0;
 }
