@@ -104,6 +104,10 @@
 #define ADRF6780_ADC_STATUS_MSK			NO_OS_BIT(8)
 #define ADRF6780_ADC_VALUE_MSK			NO_OS_GENMASK(7, 0)
 
+/* Specifications */
+#define ADRF6780_BUFF_SIZE_BYTES		3
+#define ADRF6780_SPI_READ_CMD			NO_OS_BIT(7)
+
 /******************************************************************************/
 /*************************** Types Declarations *******************************/
 /******************************************************************************/
@@ -139,7 +143,7 @@ struct adrf6780_init_param {
  * @struct adrf6780_dev
  * @brief ADRF6780 Device Descriptor.
  */
-struct adf6780_dev {
+struct adrf6780_dev {
 	/** SPI Descriptor */
 	struct no_os_spi_desc		*spi_desc;
 	/** LO Input Frequency */
@@ -168,39 +172,39 @@ struct adf6780_dev {
 
 /** ADRF6780 SPI write */
 int adrf6780_spi_write(struct adrf6780_dev *dev, uint8_t reg_addr,
-			  uint8_t data);
+		       uint16_t data);
 
 /* ADRF6780 Register Update */
-int adrf6780_spi_write_mask(struct adrf6780_dev *dev, uint8_t reg_addr,
-			       uint8_t mask, uint8_t data);
+int adrf6780_spi_update_bits(struct adrf6780_dev *dev, uint8_t reg_addr,
+			     uint16_t mask, uint16_t data);
 
 /** ADRF6780 SPI Read */
 int adrf6780_spi_read(struct adrf6780_dev *dev, uint8_t reg_addr,
-			 uint8_t *data);
+		      uint16_t *data);
 
 /** Set IMD Performance Improvement */
 int adrf6780_set_rdac_linearize(struct adrf6780_dev *dev, uint8_t rdac_lin);
 
 /** Get IMD Performance Improvement */
-int adrf6780_set_rdac_linearize(struct adrf6780_dev *dev, uint8_t *rdac_lin);
+int adrf6780_get_rdac_linearize(struct adrf6780_dev *dev, uint8_t *rdac_lin);
 
 /** Set I/Q Phase Accuracy */
 int adrf6780_set_cdac_iq_phase_accuracy(struct adrf6780_dev *dev,
 					uint8_t i_data, uint8_t q_data);
 
 /** Get I/Q Phase Accuracy */
-int adrf6780_set_cdac_iq_phase_accuracy(struct adrf6780_dev *dev,
+int adrf6780_get_cdac_iq_phase_accuracy(struct adrf6780_dev *dev,
 					uint8_t *i_data, uint8_t *q_data);
 
 /** ADRF6780 Read ADC Raw Data */
-int adrf6780_read_adc_raw(struct adrf6780_dev *dev, unsigned int *data);
+int adrf6780_read_adc_raw(struct adrf6780_dev *dev, uint16_t *data);
 
 /* Software Reset */
 int adrf6780_soft_reset(struct adrf6780_dev *dev);
 
 /** ADRF6780 Initialization */
 int adrf6780_init(struct adrf6780_dev **device,
-		     struct adrf6780_init_param *init_param);
+		  struct adrf6780_init_param *init_param);
 
 /** ADRF6780 Resources Deallocation */
 int adrf6780_remove(struct adrf6780_dev *dev);
