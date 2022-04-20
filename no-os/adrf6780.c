@@ -61,7 +61,7 @@ int adrf6780_spi_write(struct adrf6780_dev *dev, uint8_t reg_addr,
 {
 	uint8_t buff[ADRF6780_BUFF_SIZE_BYTES];
 
-	buff[0] = (reg_addr << 1) | (data >> 14);
+	buff[0] = (reg_addr << 1) | (data >> 15);
 	buff[1] = data >> 7;
 	buff[2] = data << 1;
 
@@ -90,7 +90,7 @@ int adrf6780_spi_read(struct adrf6780_dev *dev, uint8_t reg_addr,
 	if(ret)
 		return ret;
 
-	*data = ((buff[0] & NO_OS_BIT(1)) << 15 | buff[1] << 7 | buff[2] >> 1);
+	*data = ((buff[0] & NO_OS_BIT(0)) << 15 | buff[1] << 7 | buff[2] >> 1);
 
 	return 0;
 }
