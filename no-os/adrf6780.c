@@ -200,7 +200,7 @@ int adrf6780_get_cdac_iq_phase_accuracy(struct adrf6780_dev *dev,
 }
 
 /**
- * @brief Get I/Q Phase Accuracy.
+ * @brief Read ADC raw data.
  * @param dev - The device structure.
  * @param data - ADC Data.
  * @return Returns 0 in case of success or negative error code otherwise.
