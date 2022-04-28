@@ -107,6 +107,7 @@
 /* Specifications */
 #define ADRF6780_BUFF_SIZE_BYTES		3
 #define ADRF6780_SPI_READ_CMD			NO_OS_BIT(7)
+#define ADRF6780_SPI_WRITE_CMD			(0 << 7)
 
 /******************************************************************************/
 /*************************** Types Declarations *******************************/
